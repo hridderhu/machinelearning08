@@ -1,0 +1,138 @@
+---
+title: "Machine Learning Prediction Assigment"
+author: "HvdR"
+date: "june 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setting,include=FALSE, echo=FALSE, warning=FALSE}
+setwd("H:/Coursera-Datascientist/08-MachineLearning/Project")
+library(ggplot2)
+library(caret)
+```
+
+## Introduction
+It is well-agreed among physicians that physical activity
+leads to a better and longer life.
+A key requirement for effective training, without injuries, is a proper technique.
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit 
+it is now possible to collect a large amount of data about personal activity. 
+
+The goal of this project is to predict from personal activity data of weight-lifting how the exercise has been done: well or wrong.
+There is a training set with a lot of personal activity measurements. There is a "classe" variable with values "A", "B", "C", "D" and "E" which classifies the technique how the excercise has been done. Value "A" is for the right way and values "B" to "E" indicates different ways of execution mistakes.
+
+The data for this project comes from the source: http://groupware.les.inf.puc-rio.br/har.
+
+## Base data structure analysis
+The model data for this project are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+The validation set is available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+Both datasets are a csv file with heading in the first row. We first load the data:
+```{r load,include=TRUE, echo=TRUE, warning=FALSE, cache=TRUE}
+modeldata <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",header = TRUE, sep = ",", quote = "\"", dec = ".", fill = TRUE, comment.char = "")
+validationdata <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", header = TRUE, sep = ",", quote = "\"", dec = ".",  fill = TRUE, comment.char = "")
+```
+```{r loaddim,include=TRUE, echo=TRUE, warning=FALSE, cache=TRUE}
+dim(modeldata)
+```
+
+The modeldata, having 19622 observation, will be used to find an algorithm which predicts if the technique of the exercise is right or wrong. This data set will be splitted into a training part (60%) and a testing part (40%).
+The data consists of 160 predictor columns. A close look at this data (with Excel) leads to the findings:
+
+* we have consistent data of the four measurepoints: belt, arm, forearm and dumbbell
+* each measurepoint has nine raw measures: x,y,z data for gyro, accelerometor and magnetometer
+* each measurepoint has four results of calculated data for roll, pitch, yaw and total_accel
+* columnnr 160 is either the outcome "classe" for the modeldata or the problem_id in validationdata
+* The measuremnts are charecterized by: X, user\_name, 3 timestamps and 2 window indicators: we consider this data irrelevant for the algorithm finding. Some hesitation is made for the timestamps from which might derived how fast an exercise is done. But no information is given for this.
+* all other columns are mostly NA or not filled. From these some rows have data of mean and variance. Because the validation set does not have this data, we also cannot use it.
+
+The approach is using only the calculated data for roll, pitch, yaw and total_accel and focus on classification between the right way (classe="A") and the wrong way (classe != "A") of doing the exercise. This approach will be discussed in the paragraph: "Discussion".
+
+Filter the relevant data:
+```{r filter,include=TRUE, echo=TRUE, warning=FALSE, cache=TRUE}
+modelset <- modeldata[,c("classe","roll_belt","pitch_belt","yaw_belt","total_accel_belt","roll_arm","pitch_arm","yaw_arm","total_accel_arm","roll_dumbbell","pitch_dumbbell","yaw_dumbbell","total_accel_dumbbell","roll_forearm","pitch_forearm","yaw_forearm","total_accel_forearm")]
+validateset <- validationdata[,c("problem_id","roll_belt","pitch_belt","yaw_belt","total_accel_belt","roll_arm","pitch_arm","yaw_arm","total_accel_arm","roll_dumbbell","pitch_dumbbell","yaw_dumbbell","total_accel_dumbbell","roll_forearm","pitch_forearm","yaw_forearm","total_accel_forearm")]
+```
+
+Replace the outcome with "A" and not "A" (assigned as "X"):
+```{r replace,include=TRUE, echo=TRUE, warning=FALSE, cache=TRUE}
+levels(modelset$classe) <- c(levels(modelset$classe),'X')
+modelset$classe[modelset$classe != "A"] <- "X"
+modelset$classe <- droplevels(modelset$classe)
+summary(modelset$classe)
+```
+
+Split the modeldata in training and test set:
+```{r split,include=TRUE, echo=TRUE, warning=FALSE, cache=TRUE}
+set.seed(12345)
+intrain <- createDataPartition(y=modelset$classe,p=0.60,list=FALSE)
+training <- modelset[intrain,]
+testing <- modelset[-intrain,]
+dim(training)
+```
+
+Because this is a classification problem on numerical data we choose regression partion training:
+```{r train,include=TRUE, echo=TRUE, warning=FALSE, cache=TRUE}
+modFit <- train(classe ~ ., data=training, method="rpart")
+```
+
+### Cross-validation
+Cross-validation is done using the confusionMatrix for both the In sample error and the Out of sample error.
+
+#### In sample error
+Checking of resulting algoritme with the training-set self:
+```{r test1,include=TRUE, echo=TRUE, warning=FALSE, cache=TRUE}
+predtrain <- predict(modFit,newdata=training)
+predtrainconf <- confusionMatrix(predtrain,training$classe)
+predtrainconf
+```
+The in sample error indicates:
+
+* an accuracy of allmost 83%: this is acceptable  
+* a high specifity: so determining if the activity has been done wrong is very good. Warning for bad activity can be done well.
+* a low sensitivity: determining if the activity has been done right is not so well
+
+#### Out of sample error
+Checking of resulting algoritme with the training-set self:
+```{r test2,include=TRUE, echo=TRUE, warning=FALSE, cache=TRUE}
+predtest <- predict(modFit,newdata=testing)
+predtestconf <- confusionMatrix(predtest,testing$classe)
+predtestconf
+```
+
+The out of sample error is just a fraction lower as the in sample error, so the training formula is well enough.
+
+## Predicting the validationdata
+```{r validate,include=TRUE, echo=TRUE, warning=FALSE, cache=TRUE}
+predict(modFit,newdata=validateset)
+```
+This prediction shows 2 times a done-well activity and 18 times a done-wrong activity.
+
+## Conclusion
+The prediction of how well a personal activity (weigh lifting) is done can be made using the calculated data of the four body measurepoints with devices such as Jawbone Up, Nike FuelBand, and Fitbi. The wrong way of doing can be determined very well, so warning the person who is conducting a wrong way of training is quitte well possible.
+
+## Discussion
+There are four points of discussion
+
+* Did we use the right data: calculated data 
+* Did we use the right outcome: only determine right or wrong
+* Did we use the right training algoritm: rpart
+* Did we done right: in relation to the "Qualitative Activity Recognition of Weigh lifing Exercises"
+
+#### Did we use the right data
+We have choosen to use the calculated data of the four body measurepoints. We also might choose the raw x,y,z data of the gyro, accelerometor and magnetometer alone or together with the calculated. A quick prediction scan reveals no difference. So the calculated data is directly calculated from the raw x,y,z data and the raw data is redundant.
+
+#### Did we use the right outcome
+We had to choose between predicting: 1) well-done: "A" and wrong-done: "no-A"  or 2) prediction the classe "A", "B", "C", "D" or "E". When experimenting with de option 2) the train algoritm shows very high Out of sample errors for determining between the wrong manners: "B", "C", "D" or "E". So we decided not to use option 2) for this survey.
+
+#### Did we use the right training algoritm
+We have choosen to use "predicting with trees", because we have factoral outcome: 5 possibilities: "A"-"E:. Normal regression is not possible because there is no ranking in the 5 possibilities: "B" until "E" does not mean "B" is better than "E".
+For tree predicting also several training algorithms are possible. The "rpart" is choosen because all predicting values are numerical. The alternative "random forest" was not possible here, because of machine memory problems.
+
+#### Did we done right
+The paper "Qualitative Activity Recognition of Weigh lifing Exercises" (Paragraph 5.1) indicates using a random forest approach using summarized data like mean, variance, minimum and maximum values of a full training session. Because this summarize data is not present in the validation set using it in our survey is not possible. 
+Their approach reaches a far better accuracy of allmost 98%. Against our approach which reaches: 82%. 
+
