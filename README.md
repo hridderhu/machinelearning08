@@ -1,2 +1,5 @@
 # machinelearning08
-Machinelearning assigment
+My submission of the machinelearning Peer graded Assignment
+
+June 2016
+
